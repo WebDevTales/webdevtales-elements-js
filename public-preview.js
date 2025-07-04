@@ -10,6 +10,37 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// --- DYNAMICALLY LOAD CODEMIRROR LIBRARIES ---
+function loadCss(url) {
+  return new Promise((resolve) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = url;
+    link.onload = resolve;
+    document.head.appendChild(link);
+  });
+}
+function loadJs(url) {
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = resolve;
+    document.body.appendChild(script);
+  });
+}
+
+async function loadCodeMirrorDeps() {
+  await loadCss('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css');
+  await loadCss('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js');
+}
+
+// --- END DYNAMIC LOAD ---
+
 function createPreviewIframe({ html, css, js, language }) {
   const iframe = document.createElement('iframe');
   iframe.className = 'preview-iframe';
@@ -83,7 +114,9 @@ function filterAndRender() {
   renderPreviewGrid(filtered);
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+  // Dynamically load CodeMirror dependencies before anything else
+  await loadCodeMirrorDeps();
   if (document.getElementById('searchInput'))
     document.getElementById('searchInput').addEventListener('input', filterAndRender);
   if (document.getElementById('languageFilter'))
