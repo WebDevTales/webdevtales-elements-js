@@ -37,90 +37,6 @@ async function loadCodeMirrorDeps() {
   await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js');
   await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js');
   await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js');
-  // Inject !important overrides for CodeMirror CSS
-  const style = document.createElement('style');
-  style.innerHTML = `
-    .CodeMirror, .CodeMirror-gutters, .cm-s-material-darker, .cm-s-material-darker .CodeMirror-cursor, .cm-s-material-darker .CodeMirror-selected, .cm-s-material-darker .CodeMirror-line, .cm-s-material-darker .CodeMirror-gutter, .cm-s-material-darker .CodeMirror-gutters, .cm-s-material-darker .CodeMirror-linenumber, .cm-s-material-darker .CodeMirror-scrollbar-filler, .cm-s-material-darker .CodeMirror-gutter-filler {
-      background: #18191c !important;
-      color: #f7f8fa !important;
-      border: none !important;
-    }
-    .cm-s-material-darker .CodeMirror-cursor {
-      border-left: 2px solid #f43676 !important;
-    }
-    .cm-s-material-darker .CodeMirror-selected {
-      background: #2a2d32 !important;
-    }
-    .cm-s-material-darker .CodeMirror-linenumber {
-      color: #888 !important;
-    }
-    .cm-s-material-darker .cm-keyword {
-      color: #f43676 !important;
-    }
-    .cm-s-material-darker .cm-string {
-      color: #ffbd2e !important;
-    }
-    .cm-s-material-darker .cm-comment {
-      color: #6c7986 !important;
-    }
-    .cm-s-material-darker .cm-number {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-tag {
-      color: #f43676 !important;
-    }
-    .cm-s-material-darker .cm-attribute {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-def {
-      color: #fff !important;
-    }
-    .cm-s-material-darker .cm-variable {
-      color: #fff !important;
-    }
-    .cm-s-material-darker .cm-operator {
-      color: #f43676 !important;
-    }
-    .cm-s-material-darker .cm-meta {
-      color: #ffbd2e !important;
-    }
-    .cm-s-material-darker .cm-builtin {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-qualifier {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-property {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-variable-2 {
-      color: #ffbd2e !important;
-    }
-    .cm-s-material-darker .cm-variable-3 {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-type {
-      color: #27c93f !important;
-    }
-    .cm-s-material-darker .cm-header {
-      color: #f43676 !important;
-    }
-    .cm-s-material-darker .cm-link {
-      color: #f43676 !important;
-    }
-    .cm-s-material-darker .cm-error {
-      color: #fff !important;
-      background: #f43676 !important;
-    }
-    .cm-s-material-darker .CodeMirror-activeline-background {
-      background: #22242a !important;
-    }
-    .cm-s-material-darker .CodeMirror-matchingbracket {
-      color: #fff !important;
-      background: #27c93f !important;
-    }
-  `;
-  document.head.appendChild(style);
 }
 
 // --- END DYNAMIC LOAD ---
@@ -262,6 +178,33 @@ function updatePopupPreview() {
   previewContainer.appendChild(popupIframe);
 }
 
+function ensureCodeMirrorReady(mode, callback) {
+  function isReady() {
+    if (typeof CodeMirror === 'undefined') return false;
+    if (mode === 'htmlmixed' && !CodeMirror.modes['htmlmixed']) return false;
+    if (mode === 'css' && !CodeMirror.modes['css']) return false;
+    if (mode === 'javascript' && !CodeMirror.modes['javascript']) return false;
+    return true;
+  }
+  function wait() {
+    if (isReady()) {
+      callback();
+    } else {
+      setTimeout(wait, 50);
+    }
+  }
+  wait();
+}
+
+function wrapInThemeDiv(textarea) {
+  if (!textarea.parentElement.classList.contains('code-mirror-custom-theme')) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'code-mirror-custom-theme';
+    textarea.parentNode.insertBefore(wrapper, textarea);
+    wrapper.appendChild(textarea);
+  }
+}
+
 function attachGetCodeHandlers(all) {
   document.querySelectorAll('.getCodeBtn').forEach(btn => {
     btn.onclick = function() {
@@ -287,14 +230,21 @@ function attachGetCodeHandlers(all) {
         document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
         document.querySelector('.tailwindTabBtn').classList.add('active');
         document.querySelector('.tailwindTab').classList.add('active');
-        // Setup CodeMirror for Tailwind HTML if not already
-        if (!popupTailwindHtmlEditor) {
-          popupTailwindHtmlEditor = CodeMirror.fromTextArea(document.getElementById('popupTailwindHtmlCode'), {
-            mode: 'htmlmixed', theme: 'material-darker', lineNumbers: true
+        // Setup CodeMirror for Tailwind HTML
+        var ta = document.getElementById('popupTailwindHtmlCode');
+        wrapInThemeDiv(ta);
+        ensureCodeMirrorReady('htmlmixed', function() {
+          if (window.popupTailwindHtmlEditor) {
+            window.popupTailwindHtmlEditor.toTextArea();
+            window.popupTailwindHtmlEditor = null;
+          }
+          window.popupTailwindHtmlEditor = CodeMirror.fromTextArea(ta, {
+            mode: 'htmlmixed', theme: '', lineNumbers: true
           });
-          popupTailwindHtmlEditor.on('change', updatePopupPreview);
-        }
-        popupTailwindHtmlEditor.setValue(c.html||'');
+          window.popupTailwindHtmlEditor.on('change', updatePopupPreview);
+          window.popupTailwindHtmlEditor.setValue(c.html||'');
+          console.log('CodeMirror Tailwind HTML editor initialized');
+        });
       } else {
         document.querySelector('.tailwindTabBtn').style.display = 'none';
         document.querySelector('.tailwindTab').style.display = 'none';
@@ -309,27 +259,48 @@ function attachGetCodeHandlers(all) {
         document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
         document.querySelector('.htmlTabBtn').classList.add('active');
         document.querySelector('.htmlTab').classList.add('active');
-        if (!popupHtmlEditor) {
-          popupHtmlEditor = CodeMirror.fromTextArea(document.getElementById('popupHtmlCode'), {
-            mode: 'htmlmixed', theme: 'material-darker', lineNumbers: true
+        var taHtml = document.getElementById('popupHtmlCode');
+        var taCss = document.getElementById('popupCssCode');
+        var taJs = document.getElementById('popupJsCode');
+        wrapInThemeDiv(taHtml);
+        wrapInThemeDiv(taCss);
+        wrapInThemeDiv(taJs);
+        ensureCodeMirrorReady('htmlmixed', function() {
+          if (window.popupHtmlEditor) {
+            window.popupHtmlEditor.toTextArea();
+            window.popupHtmlEditor = null;
+          }
+          window.popupHtmlEditor = CodeMirror.fromTextArea(taHtml, {
+            mode: 'htmlmixed', theme: '', lineNumbers: true
           });
-          popupHtmlEditor.on('change', updatePopupPreview);
-        }
-        if (!popupCssEditor) {
-          popupCssEditor = CodeMirror.fromTextArea(document.getElementById('popupCssCode'), {
-            mode: 'css', theme: 'material-darker', lineNumbers: true
+          window.popupHtmlEditor.on('change', updatePopupPreview);
+          window.popupHtmlEditor.setValue(c.html||'');
+          console.log('CodeMirror HTML editor initialized');
+        });
+        ensureCodeMirrorReady('css', function() {
+          if (window.popupCssEditor) {
+            window.popupCssEditor.toTextArea();
+            window.popupCssEditor = null;
+          }
+          window.popupCssEditor = CodeMirror.fromTextArea(taCss, {
+            mode: 'css', theme: '', lineNumbers: true
           });
-          popupCssEditor.on('change', updatePopupPreview);
-        }
-        if (!popupJsEditor) {
-          popupJsEditor = CodeMirror.fromTextArea(document.getElementById('popupJsCode'), {
-            mode: 'javascript', theme: 'material-darker', lineNumbers: true
+          window.popupCssEditor.on('change', updatePopupPreview);
+          window.popupCssEditor.setValue(c.css||'');
+          console.log('CodeMirror CSS editor initialized');
+        });
+        ensureCodeMirrorReady('javascript', function() {
+          if (window.popupJsEditor) {
+            window.popupJsEditor.toTextArea();
+            window.popupJsEditor = null;
+          }
+          window.popupJsEditor = CodeMirror.fromTextArea(taJs, {
+            mode: 'javascript', theme: '', lineNumbers: true
           });
-          popupJsEditor.on('change', updatePopupPreview);
-        }
-        popupHtmlEditor.setValue(c.html||'');
-        popupCssEditor.setValue(c.css||'');
-        popupJsEditor.setValue(c.js||'');
+          window.popupJsEditor.on('change', updatePopupPreview);
+          window.popupJsEditor.setValue(c.js||'');
+          console.log('CodeMirror JS editor initialized');
+        });
       }
       updatePopupPreview();
     };
