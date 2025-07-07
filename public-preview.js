@@ -190,6 +190,7 @@ function getInitialBodyBg(c) {
 }
 
 function updatePopupPreview(c, idx) {
+  console.log('[DEBUG] updatePopupPreview called', {c, idx});
   // If no arguments, get current code and background from popup
   if (typeof c === 'undefined') {
     // Try to detect if Tailwind tab is active
@@ -218,39 +219,40 @@ function updatePopupPreview(c, idx) {
     popupIframe.srcdoc = previewContent;
     previewContainer.appendChild(popupIframe);
     return;
-  }
-  let html, css, js, previewContent;
-  if (c.language === 'Tailwind') {
-    html = document.getElementById('popupTailwindHtmlCode')?.textContent || '';
-    js = document.getElementById('popupJsCode')?.textContent || '';
-    // Determine if user override is a style or a class
-    const bgObj = previewBgMap[idx] || getInitialBodyBg(c);
-    let bodyClass = '';
-    let bodyStyle = '';
-    if (typeof bgObj === 'object' && bgObj.tailwindClass && !bgObj.bg) {
-      bodyClass = bgObj.tailwindClass;
-    } else if (typeof bgObj === 'object' && bgObj.bg) {
-      bodyStyle = `background:${bgObj.bg};`;
-    } else if (typeof bgObj === 'string') {
-      // User override: if it's a color/gradient, use style
-      bodyStyle = `background:${bgObj};`;
-    }
-    previewContent = `<!DOCTYPE html><html><head><script src='https://cdn.tailwindcss.com'></script></head><body${bodyClass ? ` class='${bodyClass}'` : ''}${bodyStyle ? ` style='${bodyStyle}'` : ''}><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
   } else {
-    html = document.getElementById('popupHtmlCode')?.textContent || '';
-    css = document.getElementById('popupCssCode')?.textContent || '';
-    js = document.getElementById('popupJsCode')?.textContent || '';
-    const bg = (previewBgMap[idx] && typeof previewBgMap[idx] === 'string') ? previewBgMap[idx] : (getInitialBodyBg(c).bg || '#f7f8fa');
-    previewContent = `<!DOCTYPE html><html><head><style>${css}</style></head><body style='margin:0;background:${bg};'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+    let html, css, js, previewContent;
+    if (c.language === 'Tailwind') {
+      html = document.getElementById('popupTailwindHtmlCode')?.textContent || '';
+      js = document.getElementById('popupJsCode')?.textContent || '';
+      // Determine if user override is a style or a class
+      const bgObj = previewBgMap[idx] || getInitialBodyBg(c);
+      let bodyClass = '';
+      let bodyStyle = '';
+      if (typeof bgObj === 'object' && bgObj.tailwindClass && !bgObj.bg) {
+        bodyClass = bgObj.tailwindClass;
+      } else if (typeof bgObj === 'object' && bgObj.bg) {
+        bodyStyle = `background:${bgObj.bg};`;
+      } else if (typeof bgObj === 'string') {
+        // User override: if it's a color/gradient, use style
+        bodyStyle = `background:${bgObj};`;
+      }
+      previewContent = `<!DOCTYPE html><html><head><script src='https://cdn.tailwindcss.com'></script></head><body${bodyClass ? ` class='${bodyClass}'` : ''}${bodyStyle ? ` style='${bodyStyle}'` : ''}><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+    } else {
+      html = document.getElementById('popupHtmlCode')?.textContent || '';
+      css = document.getElementById('popupCssCode')?.textContent || '';
+      js = document.getElementById('popupJsCode')?.textContent || '';
+      const bg = (previewBgMap[idx] && typeof previewBgMap[idx] === 'string') ? previewBgMap[idx] : (getInitialBodyBg(c).bg || '#f7f8fa');
+      previewContent = `<!DOCTYPE html><html><head><style>${css}</style></head><body style='margin:0;background:${bg};'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+    }
+    const previewContainer = document.querySelector('.popup-content .live-preview');
+    const oldIframe = previewContainer.querySelector('#popupPreviewIframe');
+    if (oldIframe) previewContainer.removeChild(oldIframe);
+    const popupIframe = document.createElement('iframe');
+    popupIframe.id = 'popupPreviewIframe';
+    popupIframe.className = 'preview-iframe';
+    popupIframe.srcdoc = previewContent;
+    previewContainer.appendChild(popupIframe);
   }
-  const previewContainer = document.querySelector('.popup-content .live-preview');
-  const oldIframe = previewContainer.querySelector('#popupPreviewIframe');
-  if (oldIframe) previewContainer.removeChild(oldIframe);
-  const popupIframe = document.createElement('iframe');
-  popupIframe.id = 'popupPreviewIframe';
-  popupIframe.className = 'preview-iframe';
-  popupIframe.srcdoc = previewContent;
-  previewContainer.appendChild(popupIframe);
 }
 
 function attachGetCodeHandlers(all) {
@@ -471,11 +473,13 @@ function attachGetCodeHandlers(all) {
     const codeEl = document.getElementById(id);
     if (codeEl) {
       codeEl.addEventListener('input', function() {
+        console.log(`[DEBUG] input event fired on #${id}`);
         // Save caret position
         const caret = saveCaretPosition(codeEl);
         Prism.highlightElement(codeEl);
         // Restore caret position
         restoreCaretPosition(codeEl, caret);
+        console.log('[DEBUG] Calling updatePopupPreview() after input event');
         updatePopupPreview();
       });
     }
