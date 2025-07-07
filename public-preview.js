@@ -190,6 +190,35 @@ function getInitialBodyBg(c) {
 }
 
 function updatePopupPreview(c, idx) {
+  // If no arguments, get current code and background from popup
+  if (typeof c === 'undefined') {
+    // Try to detect if Tailwind tab is active
+    const isTailwind = document.querySelector('.tailwindTabBtn')?.classList.contains('active');
+    let html, css, js, previewContent, bg, language;
+    if (isTailwind) {
+      html = document.getElementById('popupTailwindHtmlCode')?.textContent || '';
+      js = document.getElementById('popupJsCode')?.textContent || '';
+      language = 'Tailwind';
+      // Try to get background from picker or swatch
+      bg = document.getElementById('previewBgColorPicker')?.value || '#f7f8fa';
+      previewContent = `<!DOCTYPE html><html><head><script src='https://cdn.tailwindcss.com'></script></head><body style='background:${bg};'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+    } else {
+      html = document.getElementById('popupHtmlCode')?.textContent || '';
+      css = document.getElementById('popupCssCode')?.textContent || '';
+      js = document.getElementById('popupJsCode')?.textContent || '';
+      bg = document.getElementById('previewBgColorPicker')?.value || '#f7f8fa';
+      previewContent = `<!DOCTYPE html><html><head><style>${css}</style></head><body style='margin:0;background:${bg};'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+    }
+    const previewContainer = document.querySelector('.popup-content .live-preview');
+    const oldIframe = previewContainer.querySelector('#popupPreviewIframe');
+    if (oldIframe) previewContainer.removeChild(oldIframe);
+    const popupIframe = document.createElement('iframe');
+    popupIframe.id = 'popupPreviewIframe';
+    popupIframe.className = 'preview-iframe';
+    popupIframe.srcdoc = previewContent;
+    previewContainer.appendChild(popupIframe);
+    return;
+  }
   let html, css, js, previewContent;
   if (c.language === 'Tailwind') {
     html = document.getElementById('popupTailwindHtmlCode')?.textContent || '';
