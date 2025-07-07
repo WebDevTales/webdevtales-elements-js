@@ -28,16 +28,6 @@ function loadJs(url) {
   });
 }
 
-async function loadCodeMirrorDeps() {
-  await loadCss('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css');
-  await loadCss('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css');
-  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js');
-  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js');
-  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js');
-  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js');
-  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js');
-}
-
 // --- END DYNAMIC LOAD ---
 
 function createPreviewIframe({ html, css, js, language }) {
@@ -113,9 +103,7 @@ function filterAndRender() {
   renderPreviewGrid(filtered);
 }
 
-document.addEventListener('DOMContentLoaded', async function() {
-  // Dynamically load CodeMirror dependencies before anything else
-  await loadCodeMirrorDeps();
+document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('searchInput'))
     document.getElementById('searchInput').addEventListener('input', filterAndRender);
   if (document.getElementById('languageFilter'))
@@ -123,6 +111,14 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (document.getElementById('typeFilter'))
     document.getElementById('typeFilter').addEventListener('change', filterAndRender);
   loadPreviews();
+  // Color picker logic for live preview
+  const colorPicker = document.getElementById('previewBgColorPicker');
+  if (colorPicker) {
+    colorPicker.addEventListener('input', function() {
+      currentPreviewBgColor = colorPicker.value;
+      updatePopupPreview();
+    });
+  }
 });
 
 function renderPreviewGrid(components) {
@@ -152,20 +148,71 @@ function renderPreviewGrid(components) {
   attachGetCodeHandlers(components);
 }
 
-let popupHtmlEditor, popupCssEditor, popupJsEditor, popupTailwindHtmlEditor;
 let currentPopupLanguage = 'CSS';
 
-function updatePopupPreview() {
+// Track the current preview background color
+let currentPreviewBgColor = '#f7f8fa';
+
+// Store preview backgrounds per component index
+const previewBgMap = {};
+
+function getInitialBodyBg(c) {
+  if (c.language === 'Tailwind') {
+    // 1. <body class="...">
+    if (c.html) {
+      const bodyClassMatch = c.html.match(/<body[^>]*class=["']([^"']+)["']/i);
+      if (bodyClassMatch && bodyClassMatch[1]) {
+        return { tailwindClass: bodyClassMatch[1].trim() };
+      }
+      // 2. <body style="background:...">
+      const bodyStyleMatch = c.html.match(/<body[^>]*style=["'][^"']*background\s*:\s*([^;"']+)/i);
+      if (bodyStyleMatch && bodyStyleMatch[1]) {
+        return { bg: bodyStyleMatch[1].trim() };
+      }
+      // 3. <div ... style="background:...">
+      const divStyleMatch = c.html.match(/<div[^>]*style=["'][^"']*background\s*:\s*([^;"']+)/i);
+      if (divStyleMatch && divStyleMatch[1]) {
+        return { bg: divStyleMatch[1].trim() };
+      }
+    }
+    // Fallback
+    return { bg: '#f7f8fa' };
+  }
+  // For CSS: check body { background: ... }
+  if (c.css) {
+    const cssBodyBgMatch = c.css.match(/body\s*{[^}]*background\s*:\s*([^;]+);/i);
+    if (cssBodyBgMatch && cssBodyBgMatch[1]) {
+      return { bg: cssBodyBgMatch[1].trim() };
+    }
+  }
+  // Fallback
+  return { bg: '#f7f8fa' };
+}
+
+function updatePopupPreview(c, idx) {
   let html, css, js, previewContent;
-  if (currentPopupLanguage === 'Tailwind') {
-    html = popupTailwindHtmlEditor ? popupTailwindHtmlEditor.getValue() : '';
-    js = popupJsEditor ? popupJsEditor.getValue() : '';
-    previewContent = `<!DOCTYPE html><html><head><script src='https://cdn.tailwindcss.com'></script></head><body style='margin:0;'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+  if (c.language === 'Tailwind') {
+    html = document.getElementById('popupTailwindHtmlCode')?.textContent || '';
+    js = document.getElementById('popupJsCode')?.textContent || '';
+    // Determine if user override is a style or a class
+    const bgObj = previewBgMap[idx] || getInitialBodyBg(c);
+    let bodyClass = '';
+    let bodyStyle = '';
+    if (typeof bgObj === 'object' && bgObj.tailwindClass && !bgObj.bg) {
+      bodyClass = bgObj.tailwindClass;
+    } else if (typeof bgObj === 'object' && bgObj.bg) {
+      bodyStyle = `background:${bgObj.bg};`;
+    } else if (typeof bgObj === 'string') {
+      // User override: if it's a color/gradient, use style
+      bodyStyle = `background:${bgObj};`;
+    }
+    previewContent = `<!DOCTYPE html><html><head><script src='https://cdn.tailwindcss.com'></script></head><body${bodyClass ? ` class='${bodyClass}'` : ''}${bodyStyle ? ` style='${bodyStyle}'` : ''}><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
   } else {
-    html = popupHtmlEditor ? popupHtmlEditor.getValue() : '';
-    css = popupCssEditor ? popupCssEditor.getValue() : '';
-    js = popupJsEditor ? popupJsEditor.getValue() : '';
-    previewContent = `<!DOCTYPE html><html><head><style>${css}</style></head><body style='margin:0;'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
+    html = document.getElementById('popupHtmlCode')?.textContent || '';
+    css = document.getElementById('popupCssCode')?.textContent || '';
+    js = document.getElementById('popupJsCode')?.textContent || '';
+    const bg = (previewBgMap[idx] && typeof previewBgMap[idx] === 'string') ? previewBgMap[idx] : (getInitialBodyBg(c).bg || '#f7f8fa');
+    previewContent = `<!DOCTYPE html><html><head><style>${css}</style></head><body style='margin:0;background:${bg};'><div style=\"display:flex;justify-content:center;align-items:center;min-height:100vh;width:100vw;\">${html}</div><script>${js || ''}<\/script></body></html>`;
   }
   const previewContainer = document.querySelector('.popup-content .live-preview');
   const oldIframe = previewContainer.querySelector('#popupPreviewIframe');
@@ -177,44 +224,21 @@ function updatePopupPreview() {
   previewContainer.appendChild(popupIframe);
 }
 
-function ensureCodeMirrorReady(mode, callback) {
-  function isReady() {
-    if (typeof CodeMirror === 'undefined') return false;
-    if (mode === 'htmlmixed' && !CodeMirror.modes['htmlmixed']) return false;
-    if (mode === 'css' && !CodeMirror.modes['css']) return false;
-    if (mode === 'javascript' && !CodeMirror.modes['javascript']) return false;
-    return true;
-  }
-  function wait() {
-    if (isReady()) {
-      callback();
-    } else {
-      setTimeout(wait, 50);
-    }
-  }
-  wait();
-}
-
-function wrapInThemeDiv(textarea) {
-  if (!textarea.parentElement.classList.contains('code-mirror-custom-theme')) {
-    var wrapper = document.createElement('div');
-    wrapper.className = 'code-mirror-custom-theme';
-    textarea.parentNode.insertBefore(wrapper, textarea);
-    wrapper.appendChild(textarea);
-  }
-}
-
 function attachGetCodeHandlers(all) {
   document.querySelectorAll('.getCodeBtn').forEach(btn => {
     btn.onclick = function() {
       const idx = parseInt(this.getAttribute('data-idx'));
       const c = all[idx];
+      // If no user override, detect initial bg from HTML/CSS
+      if (!previewBgMap[idx]) {
+        previewBgMap[idx] = getInitialBodyBg(c);
+      }
       document.getElementById('popupOverlay').style.display = 'flex';
       const previewContainer = document.querySelector('.popup-content .live-preview');
       const oldIframe = previewContainer.querySelector('#popupPreviewIframe');
       if (oldIframe) previewContainer.removeChild(oldIframe);
       currentPopupLanguage = c.language;
-      // Show/hide tabs and editors
+      // Show/hide tabs
       if (c.language === 'Tailwind') {
         document.querySelector('.tailwindTabBtn').style.display = '';
         document.querySelector('.tailwindTab').style.display = '';
@@ -224,26 +248,23 @@ function attachGetCodeHandlers(all) {
         document.querySelector('.cssTab').style.display = 'none';
         document.querySelector('.jsTabBtn').style.display = 'none';
         document.querySelector('.jsTab').style.display = 'none';
-        // Activate Tailwind tab
         document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
         document.querySelector('.tailwindTabBtn').classList.add('active');
         document.querySelector('.tailwindTab').classList.add('active');
-        // Setup CodeMirror for Tailwind HTML
-        var ta = document.getElementById('popupTailwindHtmlCode');
-        wrapInThemeDiv(ta);
-        ensureCodeMirrorReady('htmlmixed', function() {
-          if (window.popupTailwindHtmlEditor) {
-            window.popupTailwindHtmlEditor.toTextArea();
-            window.popupTailwindHtmlEditor = null;
+        // Set code
+        const tailwindCode = document.getElementById('popupTailwindHtmlCode');
+        tailwindCode.textContent = c.html || '// No HTML code found';
+        Prism.highlightElement(tailwindCode);
+        // Show tags
+        const tagsDiv = document.getElementById('popupTailwindTags');
+        if (tagsDiv) {
+          if (Array.isArray(c.tags) && c.tags.length) {
+            tagsDiv.innerHTML = c.tags.map(tag => `<span>${tag}</span>`).join(' ');
+          } else {
+            tagsDiv.innerHTML = '';
           }
-          window.popupTailwindHtmlEditor = CodeMirror.fromTextArea(ta, {
-            mode: 'htmlmixed', theme: '', lineNumbers: true
-          });
-          window.popupTailwindHtmlEditor.on('change', updatePopupPreview);
-          window.popupTailwindHtmlEditor.setValue(c.html||'');
-          console.log('CodeMirror Tailwind HTML editor initialized');
-        });
+        }
       } else {
         document.querySelector('.tailwindTabBtn').style.display = 'none';
         document.querySelector('.tailwindTab').style.display = 'none';
@@ -253,55 +274,88 @@ function attachGetCodeHandlers(all) {
         document.querySelector('.cssTab').style.display = '';
         document.querySelector('.jsTabBtn').style.display = '';
         document.querySelector('.jsTab').style.display = '';
-        // Activate HTML tab
         document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
         document.querySelector('.htmlTabBtn').classList.add('active');
         document.querySelector('.htmlTab').classList.add('active');
-        var taHtml = document.getElementById('popupHtmlCode');
-        var taCss = document.getElementById('popupCssCode');
-        var taJs = document.getElementById('popupJsCode');
-        wrapInThemeDiv(taHtml);
-        wrapInThemeDiv(taCss);
-        wrapInThemeDiv(taJs);
-        ensureCodeMirrorReady('htmlmixed', function() {
-          if (window.popupHtmlEditor) {
-            window.popupHtmlEditor.toTextArea();
-            window.popupHtmlEditor = null;
+        // Set code
+        const htmlCode = document.getElementById('popupHtmlCode');
+        const cssCode = document.getElementById('popupCssCode');
+        const jsCode = document.getElementById('popupJsCode');
+        htmlCode.textContent = c.html || '// No HTML code found';
+        cssCode.textContent = c.css || '/* No CSS code found */';
+        jsCode.textContent = c.js || '// No JS code found';
+        Prism.highlightElement(htmlCode);
+        Prism.highlightElement(cssCode);
+        Prism.highlightElement(jsCode);
+        // Show tags
+        const htmlTagsDiv = document.getElementById('popupHtmlTags');
+        const cssTagsDiv = document.getElementById('popupCssTags');
+        const jsTagsDiv = document.getElementById('popupJsTags');
+        if (htmlTagsDiv) {
+          if (Array.isArray(c.tags) && c.tags.length) {
+            htmlTagsDiv.innerHTML = c.tags.map(tag => `<span>${tag}</span>`).join(' ');
+          } else {
+            htmlTagsDiv.innerHTML = '';
           }
-          window.popupHtmlEditor = CodeMirror.fromTextArea(taHtml, {
-            mode: 'htmlmixed', theme: '', lineNumbers: true
-          });
-          window.popupHtmlEditor.on('change', updatePopupPreview);
-          window.popupHtmlEditor.setValue(c.html||'');
-          console.log('CodeMirror HTML editor initialized');
-        });
-        ensureCodeMirrorReady('css', function() {
-          if (window.popupCssEditor) {
-            window.popupCssEditor.toTextArea();
-            window.popupCssEditor = null;
+        }
+        if (cssTagsDiv) {
+          if (Array.isArray(c.tags) && c.tags.length) {
+            cssTagsDiv.innerHTML = c.tags.map(tag => `<span>${tag}</span>`).join(' ');
+          } else {
+            cssTagsDiv.innerHTML = '';
           }
-          window.popupCssEditor = CodeMirror.fromTextArea(taCss, {
-            mode: 'css', theme: '', lineNumbers: true
-          });
-          window.popupCssEditor.on('change', updatePopupPreview);
-          window.popupCssEditor.setValue(c.css||'');
-          console.log('CodeMirror CSS editor initialized');
-        });
-        ensureCodeMirrorReady('javascript', function() {
-          if (window.popupJsEditor) {
-            window.popupJsEditor.toTextArea();
-            window.popupJsEditor = null;
+        }
+        if (jsTagsDiv) {
+          if (Array.isArray(c.tags) && c.tags.length) {
+            jsTagsDiv.innerHTML = c.tags.map(tag => `<span>${tag}</span>`).join(' ');
+          } else {
+            jsTagsDiv.innerHTML = '';
           }
-          window.popupJsEditor = CodeMirror.fromTextArea(taJs, {
-            mode: 'javascript', theme: '', lineNumbers: true
-          });
-          window.popupJsEditor.on('change', updatePopupPreview);
-          window.popupJsEditor.setValue(c.js||'');
-          console.log('CodeMirror JS editor initialized');
+        }
+      }
+      // Set background picker to current value for this component
+      const colorPicker = document.getElementById('previewBgColorPicker');
+      if (colorPicker) {
+        // Only set color picker if the value is a color (not a gradient)
+        const bg = previewBgMap[idx];
+        colorPicker.value = /^#([0-9a-f]{3}){1,2}$/i.test(bg) ? bg : '#f7f8fa';
+      }
+      // Hide tooltip on open
+      const tooltip = document.getElementById('previewBgTooltip');
+      if (tooltip) tooltip.classList.remove('show');
+      updatePopupPreview(c, idx);
+      // Settings icon logic
+      const settingsBtn = document.getElementById('previewBgSettingsBtn');
+      if (settingsBtn && tooltip) {
+        settingsBtn.onclick = function(e) {
+          e.stopPropagation();
+          tooltip.classList.toggle('show');
+        };
+        // Hide tooltip if click outside
+        document.addEventListener('click', function hideTooltip(ev) {
+          if (!tooltip.contains(ev.target) && ev.target !== settingsBtn) {
+            tooltip.classList.remove('show');
+            document.removeEventListener('click', hideTooltip);
+          }
         });
       }
-      updatePopupPreview();
+      // Preset swatch logic
+      document.querySelectorAll('.bg-swatch').forEach(swatch => {
+        swatch.onclick = function() {
+          const bg = swatch.getAttribute('data-bg');
+          previewBgMap[idx] = bg;
+          updatePopupPreview(c, idx);
+          tooltip.classList.remove('show');
+        };
+      });
+      // Color picker logic
+      if (colorPicker) {
+        colorPicker.oninput = function() {
+          previewBgMap[idx] = colorPicker.value;
+          updatePopupPreview(c, idx);
+        };
+      }
     };
   });
   // Tab switching logic: only allow switching to visible tabs
@@ -312,11 +366,6 @@ function attachGetCodeHandlers(all) {
       document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
       tab.classList.add('active');
       document.querySelector('.' + tab.dataset.tab).classList.add('active');
-      // Refresh CodeMirror editor for the active tab
-      if (tab.dataset.tab === 'htmlTab' && popupHtmlEditor) popupHtmlEditor.refresh();
-      if (tab.dataset.tab === 'cssTab' && popupCssEditor) popupCssEditor.refresh();
-      if (tab.dataset.tab === 'jsTab' && popupJsEditor) popupJsEditor.refresh();
-      if (tab.dataset.tab === 'tailwindTab' && popupTailwindHtmlEditor) popupTailwindHtmlEditor.refresh();
     };
   });
   document.getElementById('closePopupBtn').onclick = function() {
@@ -329,27 +378,77 @@ function attachGetCodeHandlers(all) {
     setTimeout(() => notif.classList.remove('show'), 1500);
   }
   document.getElementById('copyHtmlBtn').onclick = function() {
-    if (popupHtmlEditor) {
-      navigator.clipboard.writeText(popupHtmlEditor.getValue());
+    const code = document.getElementById('popupHtmlCode').textContent;
+    navigator.clipboard.writeText(code);
       showCopyNotification('HTML Copied!');
-    }
   };
   document.getElementById('copyCssBtn').onclick = function() {
-    if (popupCssEditor) {
-      navigator.clipboard.writeText(popupCssEditor.getValue());
+    const code = document.getElementById('popupCssCode').textContent;
+    navigator.clipboard.writeText(code);
       showCopyNotification('CSS Copied!');
-    }
   };
   document.getElementById('copyJsBtn').onclick = function() {
-    if (popupJsEditor) {
-      navigator.clipboard.writeText(popupJsEditor.getValue());
+    const code = document.getElementById('popupJsCode').textContent;
+    navigator.clipboard.writeText(code);
       showCopyNotification('JS Copied!');
-    }
   };
   document.getElementById('copyTailwindHtmlBtn').onclick = function() {
-    if (popupTailwindHtmlEditor) {
-      navigator.clipboard.writeText(popupTailwindHtmlEditor.getValue());
+    const code = document.getElementById('popupTailwindHtmlCode').textContent;
+    navigator.clipboard.writeText(code);
       showCopyNotification('HTML + Tailwind Copied!');
-    }
   };
+  // --- Caret preservation utilities ---
+  function saveCaretPosition(editableDiv) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    const preSelectionRange = range.cloneRange();
+    preSelectionRange.selectNodeContents(editableDiv);
+    preSelectionRange.setEnd(range.endContainer, range.endOffset);
+    return preSelectionRange.toString().length;
+  }
+
+  function restoreCaretPosition(editableDiv, savedPos) {
+    if (savedPos == null) return;
+    let charIndex = 0, range = document.createRange();
+    range.setStart(editableDiv, 0);
+    range.collapse(true);
+    const nodeStack = [editableDiv], nodes = [];
+    let node;
+    while ((node = nodeStack.pop())) {
+      if (node.nodeType === 3) {
+        nodes.push(node);
+      } else {
+        let i = node.childNodes.length;
+        while (i--) nodeStack.push(node.childNodes[i]);
+      }
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      const textNode = nodes[i];
+      const nextCharIndex = charIndex + textNode.length;
+      if (savedPos <= nextCharIndex) {
+        range.setStart(textNode, savedPos - charIndex);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+      charIndex = nextCharIndex;
+    }
+  }
+  // --- End caret preservation utilities ---
+  ['popupHtmlCode', 'popupCssCode', 'popupJsCode', 'popupTailwindHtmlCode'].forEach(id => {
+    const codeEl = document.getElementById(id);
+    if (codeEl) {
+      codeEl.addEventListener('input', function() {
+        // Save caret position
+        const caret = saveCaretPosition(codeEl);
+        Prism.highlightElement(codeEl);
+        // Restore caret position
+        restoreCaretPosition(codeEl, caret);
+        updatePopupPreview();
+      });
+    }
+  });
 } 
