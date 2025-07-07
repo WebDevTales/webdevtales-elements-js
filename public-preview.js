@@ -191,7 +191,6 @@ function getInitialBodyBg(c) {
 
 function updatePopupPreview(c, idx) {
   console.log('[DEBUG] updatePopupPreview called', {c, idx});
-  // If no arguments, get current code and background from popup
   if (typeof c === 'undefined') {
     // Try to detect if Tailwind tab is active
     const isTailwind = document.querySelector('.tailwindTabBtn')?.classList.contains('active');
