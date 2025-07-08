@@ -82,8 +82,100 @@ async function loadPreviews() {
   const snapshot = await db.collection('components').orderBy('createdAt', 'desc').get();
   const all = snapshot.docs.map(doc => doc.data());
   window.allComponents = all; // Store for filtering
+  console.log('Loaded components:', all.length);
   renderPreviewGrid(all);
   document.getElementById('loader').style.display = 'none';
+}
+
+// Pagination state
+let currentPage = 1;
+const ITEMS_PER_PAGE = 10;
+let lastFiltered = [];
+
+function setCurrentPage(page) {
+  currentPage = page;
+  console.log('Switching to page', page);
+  renderPreviewGrid(lastFiltered);
+}
+
+function renderPaginationControls(totalItems, currentPage) {
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  const container = document.getElementById('paginationControls');
+  if (!container) return;
+  container.innerHTML = '';
+  if (totalPages <= 1) return;
+  // Prev button
+  const prevBtn = document.createElement('button');
+  prevBtn.textContent = 'Prev';
+  prevBtn.className = 'pagination-btn';
+  prevBtn.disabled = currentPage === 1;
+  prevBtn.onclick = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+  container.appendChild(prevBtn);
+  // Page numbers (show max 7: current, 3 before, 3 after)
+  let startPage = Math.max(1, currentPage - 3);
+  let endPage = Math.min(totalPages, currentPage + 3);
+  if (currentPage <= 4) endPage = Math.min(7, totalPages);
+  if (currentPage > totalPages - 4) startPage = Math.max(1, totalPages - 6);
+  for (let i = startPage; i <= endPage; i++) {
+    const pageBtn = document.createElement('button');
+    pageBtn.textContent = i;
+    pageBtn.className = 'pagination-btn';
+    if (i === currentPage) pageBtn.classList.add('active');
+    pageBtn.disabled = i === currentPage;
+    pageBtn.onclick = () => setCurrentPage(i);
+    container.appendChild(pageBtn);
+  }
+  // Next button
+  const nextBtn = document.createElement('button');
+  nextBtn.textContent = 'Next';
+  nextBtn.className = 'pagination-btn';
+  nextBtn.disabled = currentPage === totalPages;
+  nextBtn.onclick = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+  container.appendChild(nextBtn);
+}
+
+function renderPreviewGrid(components) {
+  lastFiltered = components;
+  const grid = document.getElementById('previewGrid');
+  grid.innerHTML = '';
+  // Pagination logic
+  const totalItems = components.length;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  if (currentPage > totalPages) currentPage = totalPages || 1;
+  const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, totalItems);
+  const pageItems = components.slice(startIdx, endIdx);
+  if (!pageItems.length) {
+    grid.innerHTML = '<div style="color:#aaa;text-align:center;width:100%;">No components found.</div>';
+  } else {
+    pageItems.forEach((c, idx) => {
+      const card = document.createElement('div');
+      card.className = 'preview-card';
+      const title = document.createElement('div');
+      title.className = 'preview-title';
+      title.innerHTML = `<i class='fa fa-cube'></i> ${c.name}`;
+      const iframe = createPreviewIframe(c);
+      const btn = document.createElement('button');
+      btn.className = 'edit-btn-tailwindcss getCodeBtn';
+      btn.dataset.idx = startIdx + idx;
+      btn.innerHTML = `<i class='fa fa-code'></i> Get Code`;
+      card.appendChild(title);
+      card.appendChild(iframe);
+      card.appendChild(btn);
+      grid.appendChild(card);
+    });
+  }
+  grid.style.display = 'flex';
+  attachGetCodeHandlers(components);
+  renderPaginationControls(totalItems, currentPage);
 }
 
 function filterAndRender() {
@@ -100,6 +192,7 @@ function filterAndRender() {
     if (type) matches = matches && (c.type || '').toLowerCase().trim() === type.toLowerCase().trim();
     return matches;
   });
+  currentPage = 1; // Reset to first page on filter
   renderPreviewGrid(filtered);
 }
 
@@ -120,33 +213,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
-
-function renderPreviewGrid(components) {
-  const grid = document.getElementById('previewGrid');
-  grid.innerHTML = '';
-  if (!components.length) {
-    grid.innerHTML = '<div style="color:#aaa;text-align:center;width:100%;">No components found.</div>';
-  } else {
-    components.forEach((c, idx) => {
-      const card = document.createElement('div');
-      card.className = 'preview-card';
-      const title = document.createElement('div');
-      title.className = 'preview-title';
-      title.innerHTML = `<i class='fa fa-cube'></i> ${c.name}`;
-      const iframe = createPreviewIframe(c);
-      const btn = document.createElement('button');
-      btn.className = 'edit-btn-tailwindcss getCodeBtn';
-      btn.dataset.idx = idx;
-      btn.innerHTML = `<i class='fa fa-code'></i> Get Code`;
-      card.appendChild(title);
-      card.appendChild(iframe);
-      card.appendChild(btn);
-      grid.appendChild(card);
-    });
-  }
-  grid.style.display = 'flex';
-  attachGetCodeHandlers(components);
-}
 
 let currentPopupLanguage = 'CSS';
 
