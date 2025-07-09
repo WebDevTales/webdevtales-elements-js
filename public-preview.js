@@ -89,7 +89,7 @@ async function loadPreviews() {
 
 // Pagination state
 let currentPage = 1;
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 30;
 let lastFiltered = [];
 
 function setCurrentPage(page) {
