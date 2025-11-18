@@ -34,7 +34,7 @@ function createPreviewIframe({ html, css, js, language }) {
   const iframe = document.createElement('iframe');
   iframe.className = 'preview-iframe';
   iframe.style.width = '100%';
-  iframe.style.height = '340px';
+  iframe.style.height = '570px';
   iframe.style.border = 'none';
   iframe.onload = function() {
     const doc = iframe.contentDocument || iframe.contentWindow.document;
@@ -550,3 +550,4 @@ function attachGetCodeHandlers(all) {
     }
   });
 } 
+
